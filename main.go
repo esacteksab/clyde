@@ -6,18 +6,24 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/go-github/github"
+	"github.com/launchdarkly/httpcache"
+	"github.com/launchdarkly/httpcache/diskcache"
 	"golang.org/x/mod/modfile"
+	"golang.org/x/oauth2"
 )
 
 var (
 	age           int
-	score         int
+	score         float64
 	createdAtTime time.Time
+	client        *github.Client
 )
 
 type Repo struct {
@@ -35,24 +41,51 @@ type Module struct {
 	Repo   string
 }
 
+type CachingTransport struct {
+	Transport http.RoundTripper
+}
+
+func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// reqData, _ := httputil.DumpRequestOut(req, false)
+	// fmt.Printf("Request: %s\n", reqData)
+
+	resp, err := t.Transport.RoundTrip(req)
+	if err != nil {
+		return nil, err
+	}
+
+	// respData, _ := httputil.DumpResponse(resp, false)
+	// fmt.Printf("RESPONSE: %s\n", respData)
+
+	// Check if response came from cache
+	if resp.Header.Get(httpcache.XFromCache) == "1" {
+		fmt.Println("✅ RESPONSE SERVED FROM CACHE")
+	} else {
+		fmt.Println("❌ RESPONSE NOT FROM CACHE")
+	}
+
+	// Check for auth header (don't print the actual token)
+	if req.Header.Get("Authorization") != "" {
+		fmt.Println("🔑 Request contains Authorization header")
+	} else {
+		fmt.Println("⚠️ No Authorization header found!")
+	}
+
+	return resp, nil
+}
+
 func main() {
 	// Read the go.mod file
 	fileBytes, err := os.ReadFile("go.mod")
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	// Parse the go.mod file
 	mod, err := modfile.Parse("go.mod", fileBytes, nil)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
-
-	// Print the module path
-	// fmt.Println("Module Path:", mod.Module.Mod.Path)
-
-	// Print the Go version
-	// fmt.Println("Go Version:", mod.Go.Version)
 
 	// Print require statements
 	fmt.Println("Require Statements:")
@@ -74,6 +107,7 @@ func main() {
 		fmt.Printf("  %s %s\n", exc.Mod.Path, exc.Mod.Version)
 	}
 }
+
 func parseModule(module string) (m Module) {
 	s := strings.Split(module, "/")
 
@@ -96,19 +130,76 @@ func parseModule(module string) (m Module) {
 }
 
 func getRepo(m Module) (r Repo) {
-	client := github.NewClient(nil)
+	cacheDir := "./httpcache"
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil { //nolint:mnd
+		log.Fatalf("failed to create cache directory: %v\n", err)
+	}
+
+	cache := diskcache.New(cacheDir)
+
 	if m.Host != "github.com" {
 		// we don't do anything yet
 	} else {
-		repo, resp, err := client.Repositories.Get(context.Background(), m.Owner, m.Repo)
-		if _, ok := err.(*github.AbuseRateLimitError); ok {
-			log.Println("hit rate limit")
-		} else if _, ok := err.(*github.AbuseRateLimitError); ok {
-			log.Println("high secondary rate limit")
+
+		// Get the GitHub token
+		token := os.Getenv("GITHUB_TOKEN")
+		if token == "" {
+			fmt.Println("⚠️ No GITHUB_TOKEN found in environment. Using unauthenticated client with lower rate limits.")
+		} else {
+			fmt.Println("🔑 Found GITHUB_TOKEN in environment.")
 		}
-		if err != nil {
-			fmt.Println(resp)
-			log.Fatal(err)
+
+		ctx := context.Background()
+
+		if token != "" {
+			cacheTransport := httpcache.NewTransport(cache)
+			ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
+			authTransport := &oauth2.Transport{
+				Base:   cacheTransport,
+				Source: ts,
+			}
+
+			cachingTransport := &CachingTransport{Transport: authTransport}
+
+			httpClient := &http.Client{Transport: cachingTransport}
+			client = github.NewClient(httpClient)
+
+			fmt.Println("🔐 Using authenticated GitHub client")
+		} else {
+			// For unauthenticated requests, we can use a simpler chain
+			// Debug -> Cache -> HTTP
+			cacheTransport := httpcache.NewTransport(cache)
+			debugTransport := &CachingTransport{Transport: cacheTransport}
+			httpClient := &http.Client{Transport: debugTransport}
+			client = github.NewClient(httpClient)
+
+			fmt.Println("🔓 Using unauthenticated GitHub client")
+		}
+
+		repo, resp, err := client.Repositories.Get(ctx, m.Owner, m.Repo)
+		if _, ok := err.(*github.AbuseRateLimitError); ok {
+			fmt.Println("hit rate limit")
+		} else if _, ok := err.(*github.AbuseRateLimitError); ok {
+			fmt.Println("high secondary rate limit")
+		}
+
+		// Check response headers related to caching
+		// fmt.Println("\nCACHE-RELATED HEADERS:")
+		// fmt.Printf("Cache-Control: %s\n", resp.Header.Get("Cache-Control"))
+		// fmt.Printf("ETag: %s\n", resp.Header.Get("ETag"))
+		// fmt.Printf("Last-Modified: %s\n", resp.Header.Get("Last-Modified"))
+
+		rate := resp.Rate
+		fmt.Printf("Rate limit: %d/%d, resets at %v\n",
+			rate.Remaining,
+			rate.Limit,
+			(rate.Reset.Time).Local().Format("2006-01-02-15:04:05"))
+
+		// Check if rate limit is for authenticated or unauthenticated requests
+		if rate.Limit >= 5000 { //nolint:mnd
+			fmt.Println("✅ Using authenticated rate limits (5000+/hour)")
+		} else if rate.Limit <= 60 { //nolint:mnd
+			fmt.Println("❌ Using unauthenticated rate limits (60/hour)")
 		}
 
 		r = Repo{}
@@ -135,20 +226,30 @@ func getRepo(m Module) (r Repo) {
 
 		fmt.Printf("Module is: %s\n", r.Module.Name)
 		fmt.Printf("Repo was created at: %s\n", r.CreatedAt.Format("2006-01-02"))
-		fmt.Printf("Repo is a fork: %t\n", r.Fork)
+		if r.Fork {
+			fmt.Println("🍴 Repo is a fork")
+		} else if !r.Fork {
+			fmt.Println("🍰 Repo is not a fork")
+		}
 		fmt.Printf("Repo last updated at: %s\n", r.UpdatedAt.Format("2006-01-02"))
-		fmt.Printf("Module has a score of: %s out of 100.\n", score)
+		if score >= 100 {
+			fmt.Printf("⛔ Module has a score of: %f out of 100.\n", score)
+		} else if score >= 50 && score < 100 {
+			fmt.Printf("💩 Module has a score of: %f out of 100.\n", score)
+		} else if score < 50 {
+			fmt.Printf("✨ Module has a score of: %f out of 100.\n", score)
+		}
+		fmt.Println("\n====================")
 	}
 	return r
 }
 
-func calculate(created time.Time, fork bool) string {
+func calculate(created time.Time, fork bool) float64 {
 	now := time.Now()
 	difference := now.Sub(created)
 	days := int(difference.Hours() / 24) //nolint:mnd
 
 	age = 30
-	var score float64
 	score = 0
 
 	if fork {
@@ -160,10 +261,11 @@ func calculate(created time.Time, fork bool) string {
 	}
 
 	if days < age {
-		score += (float64(days) / float64(age)) * 50
+		score += (float64(days) / float64(age)) * 50 //nolint:mnd
 	}
 
 	fmt.Printf("Module is %d days old.\n", days)
-	fn := fmt.Sprintf("%.2f", score)
+	fns := fmt.Sprintf("%.2f", score)
+	fn, _ := strconv.ParseFloat(fns, 64)
 	return fn
 }
