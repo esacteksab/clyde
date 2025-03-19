@@ -160,7 +160,6 @@ func getRepo(m Module) (r Repo) {
 			}
 
 			cachingTransport := &CachingTransport{Transport: authTransport}
-
 			httpClient := &http.Client{Transport: cachingTransport}
 			client = github.NewClient(httpClient)
 
@@ -222,24 +221,20 @@ func getRepo(m Module) (r Repo) {
 		r.CreatedAt = createdAtTime
 		r.UpdatedAt = repo.UpdatedAt
 
-		score := calculate(createdAtTime, r.Fork)
-
 		fmt.Printf("Module is: %s\n", r.Module.Name)
-		fmt.Printf("Repo was created at: %s\n", r.CreatedAt.Format("2006-01-02"))
+
 		if r.Fork {
 			fmt.Println("🍴 Repo is a fork")
 		} else if !r.Fork {
 			fmt.Println("🍰 Repo is not a fork")
 		}
+
+		fmt.Printf("Repo was created at: %s\n", r.CreatedAt.Format("2006-01-02"))
 		fmt.Printf("Repo last updated at: %s\n", r.UpdatedAt.Format("2006-01-02"))
-		if score >= 100 {
-			fmt.Printf("⛔ Module has a score of: %f out of 100.\n", score)
-		} else if score >= 50 && score < 100 {
-			fmt.Printf("💩 Module has a score of: %f out of 100.\n", score)
-		} else if score < 50 {
-			fmt.Printf("✨ Module has a score of: %f out of 100.\n", score)
-		}
-		fmt.Println("\n====================")
+
+		calculate(createdAtTime, r.Fork)
+
+		fmt.Println("\nB======================================D")
 	}
 	return r
 }
@@ -248,6 +243,7 @@ func calculate(created time.Time, fork bool) float64 {
 	now := time.Now()
 	difference := now.Sub(created)
 	days := int(difference.Hours() / 24) //nolint:mnd
+	fmt.Printf("Module is %d days old.\n", days)
 
 	age = 30
 	score = 0
@@ -264,7 +260,14 @@ func calculate(created time.Time, fork bool) float64 {
 		score += (float64(days) / float64(age)) * 50 //nolint:mnd
 	}
 
-	fmt.Printf("Module is %d days old.\n", days)
+	if score >= 100 {
+		fmt.Printf("⛔ Module has a score of: %.2f out of 100.\n", score)
+	} else if score >= 50 && score < 100 {
+		fmt.Printf("💩 Module has a score of: %.2f out of 100.\n", score)
+	} else if score < 50 {
+		fmt.Printf("✨ Module has a score of: %.2f out of 100.\n", score)
+	}
+
 	fns := fmt.Sprintf("%.2f", score)
 	fn, _ := strconv.ParseFloat(fns, 64)
 	return fn
