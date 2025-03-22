@@ -4,11 +4,15 @@
 
 # Clyde
 
-Right Turn Clyde.
+_Right Turn Clyde!_
+
+---
 
 Another experiment. My very naive attempt at detecting "hijacked" or "squatted" Go modules. Still a work in progress. Uses two metrics, the age of the repository and whether it's a fork. There is likely more nuance to suss out. Maybe number of stars, number of commits after it was forked. Maybe traversing the fork(s) to identify patterns? Probably rub some AI on it.
 
 I may take this a little further. I may never revisit this. But it's an itch I needed to scratch. Only time will tell.
+
+### A little more scratching
 
 A Happy Module
 
@@ -95,6 +99,8 @@ B===================================================D
 ```
 
 Clearly I have some formatting to sort out with `float64`. This alone should further support not using this. Look who created it.
+
+See the [CHANGELOG](./CHANGELOG.md) for additional details.
 
 ## References
 
