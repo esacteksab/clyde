@@ -110,37 +110,48 @@ func main() {
 
 func parseModule(module string) (m Module) {
 	s := strings.Split(module, "/")
+	if len(s) > 2 { //nolint:mnd
+		m = Module{}
 
-	m = Module{}
+		m.Name = module
+		m.Host = s[0]
+		m.Owner = s[1]
+		m.Repo = s[2]
 
-	m.Name = module
-	m.Host = s[0]
-	m.Owner = s[1]
-	m.Repo = s[2]
-
-	// fmt.Println(s)
-	// fmt.Printf("Host is: %s\n", Host)
-	// fmt.Printf("Owwner is: %s\n", Owner)
-	// fmt.Printf("Repo is: %s\n", Repo)
-	// fmt.Printf("Host is: %s\n", m.Host)
-	// fmt.Printf("Owwner is: %s\n", m.Owner)
-	// fmt.Printf("Repo is: %s\n", m.Repo)
-
+		// fmt.Println(s)
+		// fmt.Printf("Host is: %s\n", Host)
+		// fmt.Printf("Owwner is: %s\n", Owner)
+		// fmt.Printf("Repo is: %s\n", Repo)
+		// fmt.Printf("Host is: %s\n", m.Host)
+		// fmt.Printf("Owwner is: %s\n", m.Owner)
+		// fmt.Printf("Repo is: %s\n", m.Repo)
+	}
 	return m
 }
 
 func getRepo(m Module) (r Repo) {
-	cacheDir := "./httpcache"
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil { //nolint:mnd
+	projectCacheDir, err := os.UserCacheDir()
+	if err != nil {
+		log.Fatalf("Cache Directory: %s not found", projectCacheDir)
+	}
+
+	clydeDir := "clyde"
+	// cachePath := fmt.Println(projectCacheDir + "/" + clydeDir)
+
+	// cacheDir := "./httpcache"
+
+	// Need to create clydeDir in $XDG_CACHE_HOME
+	if err := os.MkdirAll(projectCacheDir+"/"+clydeDir, 0o755); err != nil { //nolint:mnd
+		log.Fatalf("Could not create clyde directory: %v", err)
+	}
+
+	if err := os.MkdirAll(projectCacheDir, 0o755); err != nil { //nolint:mnd
 		log.Fatalf("failed to create cache directory: %v\n", err)
 	}
 
-	cache := diskcache.New(cacheDir)
+	cache := diskcache.New(projectCacheDir + "/" + clydeDir)
 
-	if m.Host != "github.com" {
-		// we don't do anything yet
-	} else {
-
+	if m.Host == "github.com" {
 		// Get the GitHub token
 		token := os.Getenv("GITHUB_TOKEN")
 		if token == "" {
@@ -233,9 +244,13 @@ func getRepo(m Module) (r Repo) {
 		fmt.Printf("Repo last updated at: %s\n", r.UpdatedAt.Format("2006-01-02"))
 
 		calculate(createdAtTime, r.Fork)
-
-		fmt.Println("\nB======================================D")
+	} else {
+		fmt.Printf("❓ Module %s not hosted on GitHub.", m.Name)
 	}
+	fmt.Println("\nB===================================================D")
+	// Because go vet doesn't like the redundant \n on the line above. Heere's an
+	// empty line. Check. Mate.
+	fmt.Println("")
 	return r
 }
 
@@ -260,11 +275,11 @@ func calculate(created time.Time, fork bool) float64 {
 		score += (float64(days) / float64(age)) * 50 //nolint:mnd
 	}
 
-	if score >= 100 {
+	if score >= 100 { //nolint:mnd
 		fmt.Printf("⛔ Module has a score of: %.2f out of 100.\n", score)
 	} else if score >= 50 && score < 100 {
 		fmt.Printf("💩 Module has a score of: %.2f out of 100.\n", score)
-	} else if score < 50 {
+	} else if score < 50 { //nolint:mnd
 		fmt.Printf("✨ Module has a score of: %.2f out of 100.\n", score)
 	}
 
