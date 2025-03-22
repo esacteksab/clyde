@@ -1,5 +1,5 @@
 #######################
-# [dir|dot]env Things # 
+# [dir|dot]env Things #
 #######################
 
 .env
@@ -13,6 +13,11 @@
 #############
 # Go Things #
 #############
+
+main
+clyde
+main.exe
+clyde.exe
 
 # Binaries for programs and plugins
 *.exe
@@ -33,6 +38,13 @@ vendor/
 # Go workspace file
 go.work
 go.work.sum
+
+#################
+# Goland Things #
+#################
+
+.idea
+
 
 #################
 # VSCode Things #
