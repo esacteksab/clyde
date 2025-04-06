@@ -3,8 +3,8 @@ module github.com/esacteksab/clyde
 go 1.24.1
 
 require (
+	github.com/esacteksab/httpcache v0.1.0
 	github.com/google/go-github v17.0.0+incompatible
-	github.com/launchdarkly/httpcache v0.0.0-20241209231841-df9f9059b0c3
 	golang.org/x/mod v0.24.0
 	golang.org/x/oauth2 v0.28.0
 //github.com/esacteksab/sausage-factory v0.0.1 //  Not fake repo. for testing purposes only

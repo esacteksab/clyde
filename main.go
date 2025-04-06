@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/esacteksab/httpcache"
+	"github.com/esacteksab/httpcache/diskcache"
 	"github.com/google/go-github/github"
-	"github.com/launchdarkly/httpcache"
-	"github.com/launchdarkly/httpcache/diskcache"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/oauth2"
 )
