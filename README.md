@@ -6,7 +6,7 @@
 
 _Right Turn Clyde!_
 
----
+______________________________________________________________________
 
 Another experiment. My very naive attempt at detecting "hijacked" or "squatted" Go modules. Still a work in progress. Uses two metrics, the age of the repository and whether it's a fork. There is likely more nuance to suss out. Maybe number of stars, number of commits after it was forked. Maybe traversing the fork(s) to identify patterns? Probably rub some AI on it.
 

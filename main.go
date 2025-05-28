@@ -12,11 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/esacteksab/httpcache"
-	"github.com/esacteksab/httpcache/diskcache"
 	"github.com/google/go-github/github"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/oauth2"
+
+	"github.com/esacteksab/httpcache"
+	"github.com/esacteksab/httpcache/diskcache"
 )
 
 var (
@@ -46,16 +47,10 @@ type CachingTransport struct {
 }
 
 func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// reqData, _ := httputil.DumpRequestOut(req, false)
-	// fmt.Printf("Request: %s\n", reqData)
-
 	resp, err := t.Transport.RoundTrip(req)
 	if err != nil {
 		return nil, err
 	}
-
-	// respData, _ := httputil.DumpResponse(resp, false)
-	// fmt.Printf("RESPONSE: %s\n", respData)
 
 	// Check if response came from cache
 	if resp.Header.Get(httpcache.XFromCache) == "1" {
@@ -68,7 +63,7 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	if req.Header.Get("Authorization") != "" {
 		fmt.Println("🔑 Request contains Authorization header")
 	} else {
-		fmt.Println("⚠️ No Authorization header found!")
+		fmt.Println("⚠️  No Authorization header found!")
 	}
 
 	return resp, nil
@@ -94,18 +89,6 @@ func main() {
 		module := parseModule(req.Mod.Path)
 		getRepo(module)
 	}
-
-	// Print replace statements
-	fmt.Println("Replace Statements:")
-	for _, rep := range mod.Replace {
-		fmt.Printf("  %s => %s %s\n", rep.Old.Path, rep.New.Path, rep.New.Version)
-	}
-
-	// Print exclude statements
-	fmt.Println("Exclude Statements:")
-	for _, exc := range mod.Exclude {
-		fmt.Printf("  %s %s\n", exc.Mod.Path, exc.Mod.Version)
-	}
 }
 
 func parseModule(module string) (m Module) {
@@ -117,35 +100,24 @@ func parseModule(module string) (m Module) {
 		m.Host = s[0]
 		m.Owner = s[1]
 		m.Repo = s[2]
-
-		// fmt.Println(s)
-		// fmt.Printf("Host is: %s\n", Host)
-		// fmt.Printf("Owwner is: %s\n", Owner)
-		// fmt.Printf("Repo is: %s\n", Repo)
-		// fmt.Printf("Host is: %s\n", m.Host)
-		// fmt.Printf("Owwner is: %s\n", m.Owner)
-		// fmt.Printf("Repo is: %s\n", m.Repo)
 	}
 	return m
 }
 
-func getRepo(m Module) (r Repo) {
+func getRepo(m Module) (r Repo) { //nolint:funlen
 	projectCacheDir, err := os.UserCacheDir()
 	if err != nil {
 		log.Fatalf("Cache Directory: %s not found", projectCacheDir)
 	}
 
 	clydeDir := "clyde"
-	// cachePath := fmt.Println(projectCacheDir + "/" + clydeDir)
-
-	// cacheDir := "./httpcache"
 
 	// Need to create clydeDir in $XDG_CACHE_HOME
-	if err := os.MkdirAll(projectCacheDir+"/"+clydeDir, 0o755); err != nil { //nolint:mnd
+	if err := os.MkdirAll(projectCacheDir+"/"+clydeDir, 0o750); err != nil { //nolint:mnd
 		log.Fatalf("Could not create clyde directory: %v", err)
 	}
 
-	if err := os.MkdirAll(projectCacheDir, 0o755); err != nil { //nolint:mnd
+	if err := os.MkdirAll(projectCacheDir, 0o750); err != nil { //nolint:mnd
 		log.Fatalf("failed to create cache directory: %v\n", err)
 	}
 
@@ -155,7 +127,9 @@ func getRepo(m Module) (r Repo) {
 		// Get the GitHub token
 		token := os.Getenv("GITHUB_TOKEN")
 		if token == "" {
-			fmt.Println("⚠️ No GITHUB_TOKEN found in environment. Using unauthenticated client with lower rate limits.")
+			fmt.Println(
+				"⚠️ No GITHUB_TOKEN found in environment. Using unauthenticated client with lower rate limits.",
+			)
 		} else {
 			fmt.Println("🔑 Found GITHUB_TOKEN in environment.")
 		}
@@ -187,17 +161,11 @@ func getRepo(m Module) (r Repo) {
 		}
 
 		repo, resp, err := client.Repositories.Get(ctx, m.Owner, m.Repo)
-		if _, ok := err.(*github.AbuseRateLimitError); ok {
+		if _, ok := err.(*github.RateLimitError); ok {
 			fmt.Println("hit rate limit")
 		} else if _, ok := err.(*github.AbuseRateLimitError); ok {
 			fmt.Println("high secondary rate limit")
 		}
-
-		// Check response headers related to caching
-		// fmt.Println("\nCACHE-RELATED HEADERS:")
-		// fmt.Printf("Cache-Control: %s\n", resp.Header.Get("Cache-Control"))
-		// fmt.Printf("ETag: %s\n", resp.Header.Get("ETag"))
-		// fmt.Printf("Last-Modified: %s\n", resp.Header.Get("Last-Modified"))
 
 		rate := resp.Rate
 		fmt.Printf("Rate limit: %d/%d, resets at %v\n",
